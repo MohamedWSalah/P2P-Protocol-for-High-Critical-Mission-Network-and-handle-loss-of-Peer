@@ -122,7 +122,7 @@ class Ping(object):
 		else:
 			print(msg)
 
-		raise Exception, "unknown_host"
+		raise(Exception, "unknown_host")
 		#sys.exit(-1)
 
 	def print_success(self, delay, ip, packet_size, ip_header, icmp_header, header=False):
@@ -131,7 +131,7 @@ class Ping(object):
 		else:
 			from_info = "%s (%s)" % (self.destination, ip)
 
-	   	msg = "%d bytes from %s: icmp_seq=%d ttl=%d time=%.1f ms" % (packet_size, from_info, icmp_header["seq_number"], ip_header["ttl"], delay)
+		msg = "%d bytes from %s: icmp_seq=%d ttl=%d time=%.1f ms" % (packet_size, from_info, icmp_header["seq_number"], ip_header["ttl"], delay)
 
 		if self.quiet_output:
 			self.response.output.append(msg)
@@ -256,7 +256,7 @@ class Ping(object):
 				print('self.bind: ', self.bind)
 				current_socket.bind((self.bind, 0)) # Port number is irrelevant for ICMP
 
-		except socket.error, (errno, msg):
+		except (socket.error, (errno, msg)):
 			if errno == 1:
 				# Operation not permitted - Add more information to traceback
 				#the code should run as administrator
@@ -264,7 +264,7 @@ class Ping(object):
 				evalue = etype(
 					"%s - Note that ICMP messages can only be sent from processes running as root." % evalue
 				)
-				raise etype, evalue, etb
+				raise (etype, evalue, etb)
 			raise # raise the original error
 
 		self.current_socket = current_socket
@@ -304,7 +304,7 @@ class Ping(object):
 				print('self.bind: ', self.bind)
 				current_socket.bind((self.bind, 0)) # Port number is irrelevant for ICMP
 
-		except socket.error, (errno, msg):
+		except (socket.error, (errno, msg)):
 			if errno == 1:
 				# Operation not permitted - Add more information to traceback
 				#the code should run as administrator
@@ -312,7 +312,7 @@ class Ping(object):
 				evalue = etype(
 					"%s - Note that ICMP messages can only be sent from processes running as root." % evalue
 				)
-				raise etype, evalue, etb
+				raise (etype, evalue, etb)
 			raise # raise the original error
 
 		send_time = self.send_one_ping(current_socket)
