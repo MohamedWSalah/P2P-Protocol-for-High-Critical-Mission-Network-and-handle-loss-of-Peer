@@ -10,19 +10,40 @@ import threading
 import socket
 import select
 import pyping
-
+import time
 
 
 #               0               1                              2          3       4           5            
 #Protocol : returnOrNot? ~ if return -> ip else -> data ~ numberOfData ~ size ~ toDelete ~ fileName 
 
-numberOfClient = 5
+numberOfClient = 2
 protocolTag = '~'
 returnIps = {}
 downloadedFiles = {}
 uploadedFiles = {}
 hostsHaveFile = []
 i=0
+
+Battery = 100
+power = float("{:.2f}".format(random.uniform(3.0,4.0)))
+processing = float("{:.2f}".format(random.uniform(5,60)))
+bandwidth = random.randint(100,1024)
+oldTime = 0
+
+def updateBattery():
+	global oldTime
+	global Battery
+	
+	if((time.time() - oldTime) > 10):
+		oldTime = time.time()
+		Battery = Battery-1
+	
+def showDeviceInfo():
+	global Battery,power,processing,bandwidth
+	print "Battery:",Battery,"%"
+	print "Device Power:",power, "V"
+	print "processing:", processing
+	print "bandwidth:",bandwidth," Kb/s"
 
 def splitFile(fileName):
 	global uploadedFiles
@@ -44,33 +65,6 @@ def splitFile(fileName):
 	result = result[:-1]
 	return result
 
-def send():
-	sourceIp = findRandomIp()
-	destinationIp = findRandomIp()
-	while destinationIp == sourceIp:
-		 destinationIp = findRandomIp()
-	print ("from %s to %s" % (sourceIp, destinationIp))
-	Server= Ping(sourceIp , destinationIp)
-	Server.do_send()
-
-def findRandomIp():   
-	hostname = socket.gethostname()     
-	ip = commands.getoutput('/sbin/ifconfig').split('\n')[1][20:28]
-	ipFounded = False
-	newIpToJoin = ""
-	while not ipFounded :
-		newIpToJoin = randint(1, numberOfClient)
-		newIpToJoin = "10.0.0." + str(newIpToJoin)
-		if not newIpToJoin == ip:
-			ipFounded = True
-	return newIpToJoin
-
-def getRandomSourceAndDestination():
-        sourceIp = findRandomIp()
-        destinationIp = findRandomIp()
-        while destinationIp == sourceIp :
-                destinationIp = findRandomIp()
-        return sourceIp, destinationIp
 
 def senderFunction(p):
 	fileName = raw_input("File name: ")
@@ -107,9 +101,9 @@ def downloadFunction(p):
 	#if(not fileName in uploadedFiles):
 		#print ("You can not downoad this file. Access denied.")
 		#return
-	ourIp = commands.getoutput('/sbin/ifconfig').split('\n')[1][13:21]
+	ourIp = commands.getoutput('/sbin/ifconfig').split('\n')[10][13:21]
 	src = ourIp
-
+	print('ourIp',ourIp)
 	
 	for i in range(numberOfClient):
 		msg = 'request~'+ ourIp +'~0~0~0~' + fileName
@@ -118,9 +112,14 @@ def downloadFunction(p):
 			continue
 		p.set_new_config(src, dst, msg)
 		p.do_send()
+		print("msg",msg)
 		print("sending file request to ip :" , dst)
 		while(True):
 			packet_size , src_ip, dest_ip, ip_header, icmp_header , payLoad = p.do_receive()
+
+			print("payload",payLoad)
+			print("src",src_ip," dest",dest_ip)
+
 			if(payLoad == 0):
 				continue
 			payloadData = payLoad.split('~')
@@ -160,9 +159,10 @@ def receiverFunction(p):
 	global i
 	global returnIps
 	global hostsHaveFile
+	
 	#print ("RETURN IPS", returnIps)
 	packet_size , src_ip, dest_ip, ip_header, icmp_header , payLoad = p.do_receive()
-	ourIp = commands.getoutput('/sbin/ifconfig').split('\n')[1][13:21]
+	ourIp = commands.getoutput('/sbin/ifconfig').split('\n')[10][13:21]
 	if not packet_size == 0:
 		payloadData = payLoad.split('~')
 		 #If it was a downloaded data
@@ -292,11 +292,14 @@ def showDownloadedFiles():
 	print("The Downloaded Files are>",downloadedFiles)
 
 def main():
+	showDeviceInfo()
 	p = Ping('0.0.0.0', '0.0.0.0')
 	currentSocket = p.get_socket()
 	buffer = []
 	print(uploadedFiles)
 	while(True):
+		
+		updateBattery()
 		inputs, output, exception = select.select([currentSocket, sys.stdin] , [currentSocket], [])
 		for i in inputs:
 			if i == currentSocket :
@@ -310,9 +313,8 @@ def main():
 					senderFunction(p)
 				elif buffer[i] == "download":
 					downloadFunction(p)
-				elif buffer[i] == "vim":
-					
-					pingAllFull()
+				elif buffer[i] == "showInfo":
+					showDeviceInfo()
 				elif buffer[i] == "showUfiles":
 					showUploadedFiles()
 				elif buffer[i] == "showDfiles":
