@@ -25,23 +25,22 @@ hostsHaveFile = []
 i=0
 
 Battery = 100
-power = float("{:.2f}".format(random.uniform(3.0,4.0)))
 processing = float("{:.2f}".format(random.uniform(5,60)))
 bandwidth = random.randint(100,1024)
+
 oldTime = 0
 
 def updateBattery():
 	global oldTime
 	global Battery
 	
-	if((time.time() - oldTime) > 10):
+	if((time.time() - oldTime) > 30):
 		oldTime = time.time()
 		Battery = Battery-1
 	
 def showDeviceInfo():
-	global Battery,power,processing,bandwidth
+	global Battery,processing,bandwidth
 	print "Battery:",Battery,"%"
-	print "Device Power:",power, "V"
 	print "processing:", processing
 	print "bandwidth:",bandwidth," Kb/s"
 
@@ -95,84 +94,80 @@ def downloadFunction(p):
 	global downloadedFiles
 	global uploadedFiles
 	global hostsHaveFile
-	showUploadedFiles()
-	showDownloadedFiles()
-	fileName = raw_input("File name: ")
+	print("The node that will help shouldnt have LESS than the following")
+	fileName = raw_input("Needed File name: ")
+
+	RequiredPower = raw_input("Required Power :")
+	RequiredProcessing = raw_input("Required Processing :")
+	RequiredBandwidth = raw_input("Required Bandwidth :")
+
 	#if(not fileName in uploadedFiles):
 		#print ("You can not downoad this file. Access denied.")
 		#return
 	ourIp = commands.getoutput('/sbin/ifconfig').split('\n')[10][13:21]
 	src = ourIp
-	print('ourIp',ourIp)
 	
 	for i in range(numberOfClient):
-		msg = 'request~'+ ourIp +'~0~0~0~' + fileName
+		msg = 'help~'+ ourIp +'~0~0~0~' + fileName + '~' + RequiredPower + '~' + RequiredProcessing + '~' + RequiredBandwidth
 		dst="10.0.0.%s"%(i+1)
 		if(dst == ourIp):
 			continue
 		p.set_new_config(src, dst, msg)
 		p.do_send()
-		print("msg",msg)
-		print("sending file request to ip :" , dst)
+		print("sending help request to ip :" , dst)
 		while(True):
 			packet_size , src_ip, dest_ip, ip_header, icmp_header , payLoad = p.do_receive()
-
-			print("payload",payLoad)
-			print("src",src_ip," dest",dest_ip)
 
 			if(payLoad == 0):
 				continue
 			payloadData = payLoad.split('~')
-			if(payloadData[0] != "request"):
+			if(payloadData[0] != "help"):
 				break
 		
 		if(payloadData[0] == "Available"):
 			hostsHaveFile.append(src_ip)
 			print("#### Host",src_ip,"was added")
 			
-	print("************************")	
-	print("hosts have the file",hostsHaveFile)
+	print("************************")
+	if (len(hostsHaveFile) == 0):
+		print("THERE IS NO NODE THAT MEET THE REQUIRED CONSTRAINTS")
+		print("NO HOSTS TO RECEIVE HELP FROM")
+		return
+	print("hosts that can help",hostsHaveFile)
 	msgreturn = 'return~'+ ourIp +'~0~0~0~' + fileName
-	choiceIP = raw_input("Host IP to Receive file from: ")
+	choiceIP = raw_input("Host IP to Receive help from: ")
 	while(choiceIP not in hostsHaveFile):
 		print("Host IP is Invalid")
-		choiceIP = raw_input("Host IP to Receive file from: ")
+		choiceIP = raw_input("Host IP to Receive help from: ")
 	hostsHaveFile = []
 	p.set_new_config(src, choiceIP, msgreturn)
 	p.do_send()
-	print("sending file request to ip :" , dst)
-		
-		
-		
-	print("ourIP:",ourIp)
-	print("msg:",msg)
-	#print("fileName : " ,fileName)
-	#print("msg : " ,msg)
-	#src, dst = getRandomSourceAndDestination()
+	print("sending help request to ip :" , dst)
 	
 	
 	downloadedFiles[fileName] = {}
 #               0               1                              2          3       4           5            
-#Protocol : returnOrNot? ~ if return -> ip else -> data ~ numberOfData ~ size ~ toDelete ~ fileName 
+#Protocol : returnOrNot? ~ if return -> ip else -> data ~ numberOfData ~ size ~ toDelete ~ fileName ~ battery ~ processing ~ bandwidth
 
 def receiverFunction(p):
 	global i
 	global returnIps
 	global hostsHaveFile
+	global Battery,processing,bandwidth
 	
-	#print ("RETURN IPS", returnIps)
 	packet_size , src_ip, dest_ip, ip_header, icmp_header , payLoad = p.do_receive()
 	ourIp = commands.getoutput('/sbin/ifconfig').split('\n')[10][13:21]
 	if not packet_size == 0:
 		payloadData = payLoad.split('~')
+		
 		 #If it was a downloaded data
-		if(icmp_header['type'] == ping.ICMP_ECHO and (not payloadData[0] == 'return') and (not payloadData[0] == 'Available') and (not payloadData[0] == 'request')):
+		if(icmp_header['type'] == ping.ICMP_ECHO and (not payloadData[0] == 'return') and (not payloadData[0] == 'Available') and (not payloadData[0] == 'help')):
 			#print("payload",payLoad)
 			if(i==0):
-				print("File found on host with ip address",src_ip)
+				print("help found on host with ip address",src_ip)
 				
 				print("======Mohamed159588======")
-				print("Starting to download ",payloadData[5])
+				print("Starting to receive help ...")
 
 				i=i+1
 			fileName = payloadData[5]
@@ -184,28 +179,29 @@ def receiverFunction(p):
 			size = int(payloadData[3])
 			#print("size",size)
 			if(len(downloadedFiles[fileName]) == size):
-				print("inside If..")
 				packData(fileName, size)
 			
-		if(payloadData[0] == 'request'):
-			if(uploadedFiles.__contains__(payloadData[5])):
-				response = 'Available~'+ ourIp +'~0~0~0~0~' + payloadData[5]
-				print("inside request")
-				print("response", response)
-				print("src ",src_ip,"  Dest", dest_ip)
+		if(payloadData[0] == 'help'):
+			if(uploadedFiles.__contains__(payloadData[5]) and float(payloadData[6]) <= Battery and float(payloadData[7]) <= processing and float(payloadData[8]) <= bandwidth):
+
+				response = 'Available~'+ ourIp +'~0~0~0~0~' + payloadData[5] + '~' + str(Battery) + '~' + str(processing) + '~' + str(bandwidth)
+				print("sending Available state to ", src_ip)
+				print("Device Current States are : ")
+				showDeviceInfo()
 				p.set_new_config(dest_ip, src_ip, response)
 				p.do_send()
 			else:
-				response = 'Unavailable~'+ ourIp +'~0~0~0~0~' + payloadData[5]
-				print("inside unavailable")
-				print("response", response)
-				print("src ",src_ip,"  Dest", dest_ip)
+				response = 'Unavailable~'+ ourIp +'~0~0~0~0~' + payloadData[5] + '~' + str(Battery) + '~' + str(processing) + '~' + str(bandwidth)
+				print("sending Unavailable state to ", src_ip)
+				print("Device Current States are : ")
+				showDeviceInfo()
 				p.set_new_config(dest_ip, src_ip, response)
 				p.do_send()
 
 		#If msg was return to home
 		if(payloadData[0] == 'return'):
 			returnIps[payloadData[5]] = payloadData[1]
+			print "***seding help request to",src_ip
 			if(uploadedFiles.__contains__(payloadData[5])):
 				fileName = payloadData[5]
 				chunkNumber = int(payloadData[2])
@@ -311,7 +307,7 @@ def main():
 			for i in range(len(buffer)):
 				if buffer[i] == "upload":
 					senderFunction(p)
-				elif buffer[i] == "download":
+				elif buffer[i] == "help":
 					downloadFunction(p)
 				elif buffer[i] == "showInfo":
 					showDeviceInfo()

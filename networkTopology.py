@@ -6,6 +6,7 @@ from mn_wifi.node import Station, OVSKernelAP
 from mn_wifi.cli import CLI
 from mn_wifi.link import wmediumd
 from mn_wifi.wmediumdConnector import interference
+#from mininet.node import Controller, RemoteController
 from subprocess import call
 
 
@@ -18,7 +19,7 @@ def myNetwork():
                        ipBase='10.0.0.0/8')
 
     info( '*** Adding controller\n' )
-    controller = RemoteController(ip='192.168.56.102')
+    #c1= net.addController('c1',controller=RemoteController,ip='192.168.56.102')
     info( '*** Add switches/APs\n')
     ap1 = net.addAccessPoint('ap1', cls=OVSKernelAP, ssid='ap1-ssid',
                              channel='6', mode='g', position='377.0,315.0,0')
@@ -44,8 +45,9 @@ def myNetwork():
     info( '*** Starting network\n')
     net.build()
     info( '*** Starting controllers\n')
-    for controller in net.controllers:
-        controller.start()
+    #for controller in net.controllers:
+        #controller.start()
+    #c1.start()
 
     info( '*** Starting switches/APs\n')
     net.get('ap1').start([])
