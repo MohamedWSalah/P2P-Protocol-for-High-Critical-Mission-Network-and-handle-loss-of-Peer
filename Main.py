@@ -57,7 +57,7 @@ def splitFile(fileName):
 		while byte != "":
 			byte = f.read(1)
 			result.append(byte)
-		print ("File uploaded succesfully.")
+		#print ("File uploaded succesfully.")
 		f.close()
 	except :
 		print ("Can not upload.")
@@ -65,8 +65,8 @@ def splitFile(fileName):
 	return result
 
 
-def senderFunction(p):
-	fileName = raw_input("File name: ")
+def senderFunction(p,X):
+	fileName = X
 
 	fileData = splitFile(fileName)
 	"""
@@ -90,12 +90,12 @@ def senderFunction(p):
 		i = i + 8
 	"""
 
-def downloadFunction(p):
+def downloadFunction(p,X):
 	global downloadedFiles
 	global uploadedFiles
 	global hostsHaveFile
 	print("The node that will help shouldnt have LESS than the following")
-	fileName = raw_input("Needed File name: ")
+	fileName = X
 
 	RequiredPower = raw_input("Required Power :")
 	RequiredProcessing = raw_input("Required Processing :")
@@ -117,7 +117,7 @@ def downloadFunction(p):
 		print("sending help request to ip :" , dst)
 		while(True):
 			packet_size , src_ip, dest_ip, ip_header, icmp_header , payLoad = p.do_receive()
-
+			
 			if(payLoad == 0):
 				continue
 			payloadData = payLoad.split('~')
@@ -126,7 +126,9 @@ def downloadFunction(p):
 		
 		if(payloadData[0] == "Available"):
 			hostsHaveFile.append(src_ip)
-			print("#### Host",src_ip,"was added")
+			print "#### Host ",src_ip," was added"
+			print "Host ",src_ip, " current stats is:"
+			print "Battery:",payloadData[7]," *** Power: ", payloadData[8]," *** Bandwidth:", payloadData[9]
 			
 	print("************************")
 	if (len(hostsHaveFile) == 0):
@@ -185,15 +187,15 @@ def receiverFunction(p):
 			if(uploadedFiles.__contains__(payloadData[5]) and float(payloadData[6]) <= Battery and float(payloadData[7]) <= processing and float(payloadData[8]) <= bandwidth):
 
 				response = 'Available~'+ ourIp +'~0~0~0~0~' + payloadData[5] + '~' + str(Battery) + '~' + str(processing) + '~' + str(bandwidth)
-				print("sending Available state to ", src_ip)
-				print("Device Current States are : ")
+				print "sending Available state to ", src_ip
+				print "Device Current States are : "
 				showDeviceInfo()
 				p.set_new_config(dest_ip, src_ip, response)
 				p.do_send()
 			else:
 				response = 'Unavailable~'+ ourIp +'~0~0~0~0~' + payloadData[5] + '~' + str(Battery) + '~' + str(processing) + '~' + str(bandwidth)
-				print("sending Unavailable state to ", src_ip)
-				print("Device Current States are : ")
+				print "sending Unavailable state to ", src_ip
+				print "Device Current States are : "
 				showDeviceInfo()
 				p.set_new_config(dest_ip, src_ip, response)
 				p.do_send()
@@ -201,11 +203,13 @@ def receiverFunction(p):
 		#If msg was return to home
 		if(payloadData[0] == 'return'):
 			returnIps[payloadData[5]] = payloadData[1]
-			print "***seding help request to",src_ip
+			
 			if(uploadedFiles.__contains__(payloadData[5])):
+				print "***seding help request to",src_ip
 				fileName = payloadData[5]
 				chunkNumber = int(payloadData[2])
-				print ("***********sending to %s data number %d for file %s"%(src_ip,chunkNumber, fileName))
+				#print "***********sending to %s data number %d for file %s"%(src_ip,chunkNumber, fileName)
+				print "*******Sending the data to", src_ip
 				downloadedFiles[fileName] = payloadData[1]
 				size = int(payloadData[3])
 				if(len(downloadedFiles[fileName]) == size):
@@ -226,8 +230,9 @@ def receiverFunction(p):
 					payload = '0' + protocolTag + data + protocolTag + '%s'%(i/8) + protocolTag + str(length) + protocolTag  + '0' + protocolTag + fileName
 					p.set_new_config(dest_ip, src_ip, payload)
 					p.do_send()
-					print("sending payload ", payload)
+					print "sending payload ", data," ~ ",payloadData[2]
 					i = i + 8
+				print("Help sent successfuly")
 	
 			elif(src_ip != ourIp and icmp_header['type'] == ping.ICMP_ECHOREPLY):
 				return
@@ -258,7 +263,8 @@ def receiverFunction(p):
 				#p.do_send()
 '''
 def packData(fileName, size):
-	print ("**********Packing %s "%(fileName))
+	#print ("**********Packing %s "%(fileName))
+	print("Help received successfuly")
 	f = open('./downloaded_' + fileName, 'wb+')
 	for i in range(0, size):
 		f.write(downloadedFiles[fileName][i])
@@ -305,10 +311,10 @@ def main():
 				buffer.append(x)
 		if currentSocket in output :
 			for i in range(len(buffer)):
-				if buffer[i] == "upload":
-					senderFunction(p)
+				if buffer[i] == "u":
+					senderFunction(p,'help.txt')
 				elif buffer[i] == "help":
-					downloadFunction(p)
+					downloadFunction(p,'help.txt')
 				elif buffer[i] == "showInfo":
 					showDeviceInfo()
 				elif buffer[i] == "showUfiles":
