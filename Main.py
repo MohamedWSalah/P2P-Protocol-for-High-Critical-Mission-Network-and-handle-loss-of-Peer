@@ -16,7 +16,7 @@ import time
 #               0               1                              2          3       4           5            
 #Protocol : returnOrNot? ~ if return -> ip else -> data ~ numberOfData ~ size ~ toDelete ~ fileName 
 
-numberOfClient = 2
+numberOfClient = 6
 protocolTag = '~'
 returnIps = {}
 downloadedFiles = {}
@@ -205,11 +205,11 @@ def receiverFunction(p):
 			returnIps[payloadData[5]] = payloadData[1]
 			
 			if(uploadedFiles.__contains__(payloadData[5])):
-				print "***seding help request to",src_ip
+				print "*******sending help request to",src_ip
 				fileName = payloadData[5]
 				chunkNumber = int(payloadData[2])
 				#print "***********sending to %s data number %d for file %s"%(src_ip,chunkNumber, fileName)
-				print "*******Sending the data to", src_ip
+				print "*******Sending the data requested to", src_ip
 				downloadedFiles[fileName] = payloadData[1]
 				size = int(payloadData[3])
 				if(len(downloadedFiles[fileName]) == size):
@@ -229,8 +229,9 @@ def receiverFunction(p):
 							data += fileData[j]
 					payload = '0' + protocolTag + data + protocolTag + '%s'%(i/8) + protocolTag + str(length) + protocolTag  + '0' + protocolTag + fileName
 					p.set_new_config(dest_ip, src_ip, payload)
+					
 					p.do_send()
-					print "sending payload ", data," ~ ",payloadData[2]
+					print "sending payload ", data," ~ ", '%s'%(i/8)
 					i = i + 8
 				print("Help sent successfuly")
 	
