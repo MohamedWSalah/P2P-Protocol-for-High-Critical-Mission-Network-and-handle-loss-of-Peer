@@ -3,6 +3,7 @@ from ping import Ping
 from random import randint
 import random
 import commands
+import subprocess
 import time 
 import socket
 import sys
@@ -64,11 +65,34 @@ def splitFile(fileName):
 	result = result[:-1]
 	return result
 
+def hopsCount():
+	global hostsHaveFile
+	hopsCounter = -1
+	chosenIP = ''
+	chosenHops = 100
+	for IP in hostsHaveFile:
+		time.sleep(3)
+		print "checking number of hops to ",IP
+		traceroute = subprocess.Popen(["traceroute", '-w', '100',IP],stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+		for line in iter(traceroute.stdout.readline,""):
+			hopsCounter = hopsCounter+1
+		if (hopsCounter < chosenHops):
+			chosenHops = hopsCounter
+			chosenIP = IP
+		hopsCounter=-1
+		
+		
+	print "Best Node IP is " ,chosenIP
+	return chosenIP
+
 
 def senderFunction(p,X):
 	fileName = X
 
 	fileData = splitFile(fileName)
+	
+
 	"""
 	#send file
 	i = 0
@@ -136,15 +160,13 @@ def downloadFunction(p,X):
 		print("NO HOSTS TO RECEIVE HELP FROM")
 		return
 	print("hosts that can help",hostsHaveFile)
+	print("Find the best node to receive help from.....")
 	msgreturn = 'return~'+ ourIp +'~0~0~0~' + fileName
-	choiceIP = raw_input("Host IP to Receive help from: ")
-	while(choiceIP not in hostsHaveFile):
-		print("Host IP is Invalid")
-		choiceIP = raw_input("Host IP to Receive help from: ")
+	choiceIP = hopsCount()
 	hostsHaveFile = []
 	p.set_new_config(src, choiceIP, msgreturn)
 	p.do_send()
-	print("sending help request to ip :" , dst)
+	
 	
 	
 	downloadedFiles[fileName] = {}
@@ -169,13 +191,13 @@ def receiverFunction(p):
 				print("help found on host with ip address",src_ip)
 				
 				print("======Mohamed159588======")
-				print("Starting to receive help ...")
+				print "Receiving help ... from",src_ip
 
 				i=i+1
 			fileName = payloadData[5]
 			chunkNumber = int(payloadData[2])
 			
-			print ("***********Downloading data number %d for file %s"%(chunkNumber, fileName))
+			print ("***********Downloading data number %d"%(chunkNumber))
 			downloadedFiles[fileName][chunkNumber] = payloadData[1]
 			
 			size = int(payloadData[3])
