@@ -12,7 +12,10 @@ import socket
 import select
 import pyping
 import time
-
+import signal
+import operator
+import collections
+import multiprocessing
 
 #               0               1                              2          3       4           5            
 #Protocol : returnOrNot? ~ if return -> ip else -> data ~ numberOfData ~ size ~ toDelete ~ fileName 
@@ -23,11 +26,23 @@ returnIps = {}
 downloadedFiles = {}
 uploadedFiles = {}
 hostsHaveFile = []
+bestHosts = []
+test = ''
 i=0
+RequiredPower,RequiredProcessing,RequiredBandwidth = 0,0,0
+class TimeoutException(Exception):
+    pass
+
+def sigalrm_handler(signum, frame):
+    # We get signal!
+    raise TimeoutException()
+
+
 
 Battery = 100
 processing = float("{:.2f}".format(random.uniform(5,60)))
 bandwidth = random.randint(100,1024)
+state = 'transmitting'
 
 oldTime = 0
 
@@ -44,6 +59,7 @@ def showDeviceInfo():
 	print "Battery:",Battery,"%"
 	print "processing:", processing
 	print "bandwidth:",bandwidth," Kb/s"
+	print "State:",state
 
 def splitFile(fileName):
 	global uploadedFiles
@@ -67,9 +83,12 @@ def splitFile(fileName):
 
 def hopsCount():
 	global hostsHaveFile
+	global bestHosts
 	hopsCounter = -1
 	chosenIP = ''
 	chosenHops = 100
+	listIPs = []
+	listHops = []
 	for IP in hostsHaveFile:
 		time.sleep(3)
 		print "checking number of hops to ",IP
@@ -77,13 +96,19 @@ def hopsCount():
 
 		for line in iter(traceroute.stdout.readline,""):
 			hopsCounter = hopsCounter+1
+		
 		if (hopsCounter < chosenHops):
 			chosenHops = hopsCounter
 			chosenIP = IP
+		
+		listIPs.append(IP)
+		listHops.append(hopsCounter)
 		hopsCounter=-1
 		
-		
-	print "Best Node IP is " ,chosenIP
+	ziplist = zip(listHops,listIPs)
+	sortedlist = sorted(ziplist)
+	bestHosts = [element for _,element in sortedlist]
+	print("best hosts",bestHosts)
 	return chosenIP
 
 
@@ -91,39 +116,28 @@ def senderFunction(p,X):
 	fileName = X
 
 	fileData = splitFile(fileName)
-	
 
-	"""
-	#send file
-	i = 0
-	length = 0
-	if len(fileData) % 8 == 0 :
-		length = len(fileData) / 8
-	else:
-		length = (len(fileData) / 8) + 1 
-	while i < len(fileData):
-		data = ''
-		for j in range(i , i + 8):
-			if j < len(fileData):
-				data += fileData[j]
-		payload = '0' + protocolTag + data + protocolTag + '%s'%(i/8) + protocolTag + str(length) + protocolTag  + '0' + protocolTag + fileName
-		src, dst = getRandomSourceAndDestination()
-		print("source: ",src,"  Dest:", dst)
-		p.set_new_config( src,dst, payload)
-		p.do_send()
-		i = i + 8
-	"""
 
-def downloadFunction(p,X):
+def downloadFunction(p,X,power=None,processing=None,bandwidth=None):
 	global downloadedFiles
 	global uploadedFiles
 	global hostsHaveFile
+	global bestHosts
+	global state
+	global RequiredPower,RequiredProcessing,RequiredBandwidth
+
+	state = "receiving"
 	print("The node that will help shouldnt have LESS than the following")
 	fileName = X
-
-	RequiredPower = raw_input("Required Power :")
-	RequiredProcessing = raw_input("Required Processing :")
-	RequiredBandwidth = raw_input("Required Bandwidth :")
+	if power:
+		RequiredPower = power
+		RequiredProcessing = processing
+		RequiredBandwidth = bandwidth
+	else:
+		
+		RequiredPower = raw_input("Required Power :")
+		RequiredProcessing = raw_input("Required Processing :")
+		RequiredBandwidth = raw_input("Required Bandwidth :")
 
 	#if(not fileName in uploadedFiles):
 		#print ("You can not downoad this file. Access denied.")
@@ -166,21 +180,71 @@ def downloadFunction(p,X):
 	hostsHaveFile = []
 	p.set_new_config(src, choiceIP, msgreturn)
 	p.do_send()
-	
-	
-	
 	downloadedFiles[fileName] = {}
+
+
+def handlingLoss(destIP,p):
+	print "**** Searching for another host to receive help from ****"
+	time.sleep(2)
+	ourIp = commands.getoutput('/sbin/ifconfig').split('\n')[10][13:21]
+	msgreturn = 'return~'+ ourIp +'~0~0~0~' + 'help.txt'
+	p.set_new_config(ourIp, destIP, msgreturn)
+	print "Receiving help from",destIP
+	p.do_send()
 #               0               1                              2          3       4           5            
 #Protocol : returnOrNot? ~ if return -> ip else -> data ~ numberOfData ~ size ~ toDelete ~ fileName ~ battery ~ processing ~ bandwidth
 
+def handlePacket(r1,r2,r3,r4,r5,r6,p):
+	packet_size , src_ip, dest_ip, ip_header, icmp_header , payLoad = p.do_receive()
+	r1.put(packet_size)
+	r2.put(src_ip)
+	r3.put(dest_ip)
+	r4.put(ip_header)
+	r5.put(icmp_header)
+	r6.put(payLoad)
+	return
+
 def receiverFunction(p):
+
 	global i
 	global returnIps
 	global hostsHaveFile
-	global Battery,processing,bandwidth
+	global Battery,processing,bandwidth,state,bestHosts,RequiredPower,RequiredProcessing,RequiredBandwidth,test
 	
-	packet_size , src_ip, dest_ip, ip_header, icmp_header , payLoad = p.do_receive()
 	ourIp = commands.getoutput('/sbin/ifconfig').split('\n')[10][13:21]
+	
+	packet_size , src_ip, dest_ip, ip_header, icmp_header , payLoad = "","","","","",""
+	if ( state == "receiving" ):
+		r1 = multiprocessing.Queue()
+		r2 = multiprocessing.Queue()
+		r3 = multiprocessing.Queue()
+		r4 = multiprocessing.Queue()
+		r5 = multiprocessing.Queue()
+		r6 = multiprocessing.Queue()
+		proc = multiprocessing.Process(target=handlePacket, args=[r1,r2,r3,r4,r5,r6,p])
+		proc.start()
+		proc.join(5)
+		#No return received in 6 secs	
+		if (proc.is_alive()):
+			proc.terminate()
+			proc.join()
+			receiverFunction(p)
+			return
+		else:
+			packet_size , src_ip, dest_ip, ip_header, icmp_header , payLoad = r1.get(),r2.get(),r3.get(),r4.get(),r5.get(),r6.get()
+			if(packet_size==0):
+				#downloadFunction(p,'help.txt',power=RequiredPower,processing=RequiredProcessing,bandwidth=RequiredBandwidth)
+				print "lost connection from",test
+				bestHosts.pop(0)
+				if(len(bestHosts) == 0):
+					print "No Hosts found to receive help from."
+					return
+				i = i-1
+				handlingLoss(bestHosts[0],p)
+		
+	else:
+		packet_size , src_ip, dest_ip, ip_header, icmp_header , payLoad = p.do_receive()
+		
 	if not packet_size == 0:
 		payloadData = payLoad.split('~')
 		
@@ -192,7 +256,7 @@ def receiverFunction(p):
 				
 				print("======Mohamed159588======")
 				print "Receiving help ... from",src_ip
-
+				test=src_ip
 				i=i+1
 			fileName = payloadData[5]
 			chunkNumber = int(payloadData[2])
@@ -204,7 +268,8 @@ def receiverFunction(p):
 			#print("size",size)
 			if(len(downloadedFiles[fileName]) == size):
 				packData(fileName, size)
-			
+				
+			receiverFunction(p)
 		if(payloadData[0] == 'help'):
 			if(uploadedFiles.__contains__(payloadData[5]) and float(payloadData[6]) <= Battery and float(payloadData[7]) <= processing and float(payloadData[8]) <= bandwidth):
 
@@ -245,54 +310,44 @@ def receiverFunction(p):
 				else:
 					length = (len(fileData) / 8) + 1 
 				while i < len(fileData):
+					#Made this to randomize the drop/loss of peer in order to simulate a real life situtation
+					dropChance = random.randint(1,10)
+
 					data = ''
 					for j in range(i , i + 8):
 						if j < len(fileData):
 							data += fileData[j]
 					payload = '0' + protocolTag + data + protocolTag + '%s'%(i/8) + protocolTag + str(length) + protocolTag  + '0' + protocolTag + fileName
-					p.set_new_config(dest_ip, src_ip, payload)
 					
-					p.do_send()
-					print "sending payload ", data," ~ ", '%s'%(i/8)
-					i = i + 8
+					if (dropChance <= 2 and i != 0):
+						print "drop chance",dropChance
+						print "Host Disconnected"
+						return
+					else:
+						p.set_new_config(dest_ip, src_ip, payload)
+						p.do_send()
+						print "sending payload ", data," ~ ", '%s'%(i/8)
+						i = i + 8
 				print("Help sent successfuly")
 	
-			elif(src_ip != ourIp and icmp_header['type'] == ping.ICMP_ECHOREPLY):
+			elif(src_ip != ourIp and icmp_header['type'] == ping.ICMP_ECHOREPLY and state != "receiving"):
+
 				return
-			else:
-				print("File not available for", src_ip,". file name is ", payloadData[5])
+			
 			
 
-'''
-		#If msg was return to home	
-		if(icmp_header['type'] == ping.ICMP_ECHOREPLY):
-			# print "PayLoad is %s"%(payLoad)
-			#If Bezzy get the chunk
-			if(payloadData[4] == '1'):
-				print ("***********Deleting file number %s from network"%(payloadData[2]))
-			#If we should send this chunk to Home 
-			elif((not payloadData[0] == 'return') and payloadData[5] in returnIps):
-					payloadData[4] = '1'
-					payLoad = '~'.join(payloadData)
-					print ("***********Sending to Home %s"%(returnIps[payloadData[5]]))
-					ourIp = commands.getoutput('/sbin/ifconfig').split('\n')[1][20:28]
-					p.set_new_config(ourIp, returnIps[payloadData[5]], payLoad)
-					p.do_send()
-			#If we should spin the chunk
 
-			#else : 
-				
-				#p.set_new_config(dest_ip, src_ip, payLoad)
-				#p.do_send()
-'''
 def packData(fileName, size):
+	global state,downloadedFiles
 	#print ("**********Packing %s "%(fileName))
 	print("Help received successfuly")
+	
+	state = "transmitting"
 	f = open('./downloaded_' + fileName, 'wb+')
 	for i in range(0, size):
 		f.write(downloadedFiles[fileName][i])
 	f.close()
-	
+	downloadedFiles = {}
 def showFile():
 	fileName = raw_input("File name: ")
 	result = ""
