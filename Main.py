@@ -40,7 +40,7 @@ def sigalrm_handler(signum, frame):
 
 
 Battery = 100
-processing = float("{:.2f}".format(random.uniform(5,60)))
+processing = float("{:.2f}".format(random.uniform(5,15)))
 bandwidth = random.randint(100,1024)
 state = 'transmitting'
 
@@ -52,8 +52,9 @@ def updateBattery():
 	
 	if((time.time() - oldTime) > 30):
 		oldTime = time.time()
-		Battery = Battery-1
-	
+		Battery = Battery - 1
+
+
 def showDeviceInfo():
 	global Battery,processing,bandwidth
 	print "Battery:",Battery,"%"
@@ -223,8 +224,7 @@ def receiverFunction(p):
 		r6 = multiprocessing.Queue()
 		proc = multiprocessing.Process(target=handlePacket, args=[r1,r2,r3,r4,r5,r6,p])
 		proc.start()
-		proc.join(5)
-		#No return received in 6 secs	
+		proc.join(6)
 		if (proc.is_alive()):
 			proc.terminate()
 			proc.join()
@@ -238,6 +238,7 @@ def receiverFunction(p):
 				bestHosts.pop(0)
 				if(len(bestHosts) == 0):
 					print "No Hosts found to receive help from."
+					state = 'transmitting'
 					return
 				i = i-1
 				handlingLoss(bestHosts[0],p)
@@ -249,7 +250,7 @@ def receiverFunction(p):
 		payloadData = payLoad.split('~')
 		
 		 #If it was a downloaded data
-		if(icmp_header['type'] == ping.ICMP_ECHO and (not payloadData[0] == 'return') and (not payloadData[0] == 'Available') and (not payloadData[0] == 'help')):
+		if(icmp_header['type'] == ping.ICMP_ECHO and (not payloadData[0] == 'return') and (not payloadData[0] == 'Available') and (not payloadData[0] == 'help') and state == 'receiving'):
 			#print("payload",payLoad)
 			if(i==0):
 				print("help found on host with ip address",src_ip)
@@ -261,7 +262,8 @@ def receiverFunction(p):
 			fileName = payloadData[5]
 			chunkNumber = int(payloadData[2])
 			
-			print ("***********Downloading data number %d"%(chunkNumber))
+			print ("***********Downloading data number %d from %s"%(chunkNumber,src_ip))
+
 			downloadedFiles[fileName][chunkNumber] = payloadData[1]
 			
 			size = int(payloadData[3])
@@ -288,11 +290,11 @@ def receiverFunction(p):
 				p.do_send()
 
 		#If msg was return to home
-		if(payloadData[0] == 'return'):
+		if(payloadData[0] == 'return' and src_ip != ourIp and state == 'transmitting'):
 			returnIps[payloadData[5]] = payloadData[1]
 			
-			if(uploadedFiles.__contains__(payloadData[5])):
-				print "*******sending help request to",src_ip
+			if(uploadedFiles.__contains__('help.txt') and src_ip != ourIp and state == 'transmitting'):
+				print "*******sending help to",src_ip
 				fileName = payloadData[5]
 				chunkNumber = int(payloadData[2])
 				#print "***********sending to %s data number %d for file %s"%(src_ip,chunkNumber, fileName)

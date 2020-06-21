@@ -42,7 +42,7 @@ def myNetwork():
     net.addLink(sta5, cls=adhoc, ssid='adhocNet', proto='olsr', mode='g', channel=5, intf='sta5-wlan0')
     net.addLink(sta6, cls=adhoc, ssid='adhocNet', proto='olsr', mode='g', channel=5, intf='sta6-wlan0')   
 
-    net.plotGraph(max_x=500, max_y=500)
+    net.plotGraph(max_x=300, max_y=100)
 
     info( '*** Starting network\n')
     net.build()
