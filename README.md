@@ -1,4 +1,4 @@
-#Problem
+## Problem
 it is important to have the network running perfectly in a high critical mission network. The problem itself is found in a huge network based on its peers, if one of them lost, the whole network will have a trouble. This lost peer might have a specific task to do, and that task will not be done as the assigned peer to this task is dead.
 
 ## Solution
